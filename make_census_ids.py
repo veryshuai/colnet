@@ -7,39 +7,46 @@ if __name__ == "__main__":
         converts to numeric values, and saves"""
 
     # LOAD DATA
-    dat    = pd.read_csv('network_data.csv',delimiter='|',quotechar='"')
-    dat.to_pickle('dat.pandas')
-    dat     = pd.read_pickle('dat.pandas')
-    
+    #dat    = pd.read_csv('network_data.csv', delimiter='|', quotechar='"', error_bad_lines=False, encoding='iso-8859-1')
+    #dat.to_pickle('network_data.pickle')
+    dat = pd.read_pickle('network_data.pickle')
+
     #CREATE FIRM ID
-    dat['STR_ID'] = dat['COD_PAI3'].str.strip().str[:3]\
-            + dat['CIU_PDES'].str.strip().str[:3]\
-            + dat['RAZN_IMP'].str.strip().str[:3]# + dat['DIR_PDES'].str.strip().str[:2]
+    dat['STR_ID'] = dat['imp_name'].str.strip().str[:7]\
+            + dat['dest_alf'].str.strip().str[:3]
+            #+ dat['imp_city'].str.strip().str[:3]\
+            #+ dat['imp_address'].str.strip().str[:2]
     dat['STR_ID'] = dat['STR_ID'].str.upper()
+
+    #DROP NO NAMES
+    dat = dat[dat['imp_name'] != '']
     
     #CREATE YEAR
-    dat['YEAR'] = dat['FECH_PR3'].apply(lambda x: x / 100)
+    dat['YEAR'] = dat['yr_month'].apply(lambda x: int(x / 100))
 
     #YEAR FILTER
     dat = dat[dat['YEAR'] == 2009]
     
     #REPLACE STRINGS WITH NUMBERS - IMPORTER
-    grouped = dat.groupby('STR_ID')['COD_PAI3'].first() # unique row for each firm
+    grouped = dat.groupby('STR_ID')['dest_alf'].first() # unique row for each firm
     grouped = pd.DataFrame(grouped).reset_index().reset_index() # create unique numerical index for each firm
     dat     = pd.merge(dat, grouped, on='STR_ID') # merge into original data
-    
+
     #REPLACE STRINGS WITH NUMBERS - EXPORTER
-    grouped = dat.groupby('NIT3')['COD_PAI3_x'].first() # unique row for each firm
-    grouped = pd.DataFrame(grouped).reset_index().reset_index() # create unique numerical index for each firm
-    dat     = pd.merge(dat, grouped, on='NIT3') # merge into original data
+    #grouped = dat.groupby('exp_id')['dest_code'].first() # unique row for each firm
+    grouped = dat.drop_duplicates(cols='exp_id') # unique row for each firm
+    grouped = grouped.reset_index().drop('level_0', 1).reset_index() # create unique numerical index for each firm
+    grouped['index'] = grouped['level_0'] #kludge to make indexes match
+    grouped = grouped[['index', 'exp_id']]
+    dat     = pd.merge(dat, grouped, on='exp_id', suffixes=('_x','_y') )# merge into original data
 
     #CREATE NUM ID TRANSLATION LISTS
     dat[['STR_ID', 'index_x']].groupby('index_x').first().to_csv('importer_id.csv')
-    dat[['NIT3', 'index_y']].groupby('index_y').first().to_csv('exporter_id.csv')
-    
+    dat[['exp_id', 'index_y']].groupby('index_y').first().to_csv('exporter_id.csv')
+
     #CREATE REDUCED DATA
-    red_dat         = dat[['index_y','index_x','YEAR','POS_ARA3','FOB_DOL3']]
-    red_dat.columns = ['EXP_ID','IMP_ID','YEAR','POS_ARA3','FOB_DOL3']
+    red_dat         = dat[['index_y','index_x','YEAR','hs10','x_fob','dest_alf_x','STR_ID', 'exp_id']]
+    red_dat.columns = ['EXP_ID','IMP_ID','YEAR','hs10','x_fob','dest_alf','imp_alf','exp_id_orig']
 
     #OUTPUT TO CSV
     red_dat.to_csv('graph_trans.csv')

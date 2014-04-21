@@ -8,20 +8,24 @@ import matplotlib.pyplot as plt
 
 def load_dat():
     graph = ig.read('igraph_small.csv',format='edge')
-    vals = pd.read_csv('vals_small.csv')[' val']
-    return graph, vals
+    vals = pd.read_csv('vals_small.csv')['val']
+    hs = pd.read_csv('vals_small.csv')['hs10']
+    dest = pd.read_csv('vals_small.csv')['dest_alf']
+    return graph, vals, hs, dest
 
-def make_projection(graph, vals):
+def make_projection(graph, vals, hs, dest):
     """ makes bipartite projections, returns seller projection"""
 
-    # PREPARE ATTRIBUTE (FOB SHIPMENT VALUE)
+    # PREPARE ATTRIBUTES
     graph.es['val'] = list(vals)
+    graph.es['hs'] = list(hs)
+    graph.es['dest'] = list(dest)
     graph.vs['val'] = graph.strength(range(len(graph.vs)), weights='val')
     
     # SIZES FROM graph.csv
-    size =12689
-    edge_size = 75384
-    big_size = 47231
+    size =15563
+    edge_size = 76766
+    big_size = 49272
     sub = size
     
     # MAKE THE TWO TYPES (SELLER AND BUYER)
@@ -136,10 +140,10 @@ if __name__ == "__main__":
     """ runs all the functions """
 
     # LOAD DATA
-    graph, vals = load_dat()    
+    graph, vals, hs, dest = load_dat()    
 
     # SET ATTRIBUTES
-    proj1, proj2 = make_projection(graph, vals)
+    proj1, proj2 = make_projection(graph, vals, hs, dest)
 
     
     # GET COMPONENTS AND VAL INFO
