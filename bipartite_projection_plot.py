@@ -121,9 +121,9 @@ def plot_comp(comp, fname, layout_name):
 
     size = len(comp.vs)
     edge_size = len(comp.es)
-    comp.vs['label'] = [''] * size
+    comp.vs['label'] = [int(x / 10000000) for x in comp.vs['hs']]
     comp.vs['size']  = [math.log(x) for x in comp.vs.degree()]
-    comp.vs['label_size']  = [0] * size
+    #comp.vs['label_size']  = [0] * size
     comp.es['arrow_size']  = [0] * edge_size
     comp.es['width']  = [0.1] * edge_size
 
