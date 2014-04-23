@@ -15,11 +15,22 @@ def error_proof_convert(x):
 def error_proof_hs(x):
     try:
         arg = stats.mode(x)
-        return int(arg[0][0])
+        return arg[0][0]
     except Exception as e:
         print(e)
         print('WARNING: Problem in hs mode finding error_proof_hs')
         return 0
+
+def epm(x):
+    try:
+        first = x['index'].iat[0]
+        max_ind = x['x_fob'].idxmax()
+        res = x['imp_name'].iat[max_ind - first]
+        return res
+    except Exception as e:
+        print(e)
+        print('WARNING: Problem in max finding epm')
+        return 'ERROR'
 
 def main():
     dat = pd.read_csv('graph_trans.csv')
@@ -27,6 +38,14 @@ def main():
             .groupby(['EXP_ID','IMP_ID'])['x_fob'].apply(error_proof_convert)
     hs = dat.reset_index()\
             .groupby(['EXP_ID','IMP_ID'])['hs10'].apply(error_proof_hs)
+    dat['hs_source'] = dat.reset_index()\
+            .groupby(['EXP_ID'])['hs10'].transform(error_proof_hs)
+    dat['hs_dest'] = dat.reset_index()\
+            .groupby(['IMP_ID'])['hs10'].transform(error_proof_hs)
+    dat['dest'] = dat.reset_index()\
+           .groupby(['EXP_ID'])['dest_alf'].transform(error_proof_hs)
+    #dat['imp_name'] = dat.reset_index().groupby(['EXP_ID'], axis=1).apply(epm)
+    max_imp = dat.reset_index().groupby(['EXP_ID']).apply(epm)
     dat = dat.drop_duplicates(['EXP_ID','IMP_ID'])
     dat = dat.reset_index().set_index(['EXP_ID','IMP_ID'])\
             .drop('index',1).drop('Unnamed: 0', 1)
@@ -34,5 +53,6 @@ def main():
     dat['hs10'] = hs 
     dat.reset_index().set_index('EXP_ID')
     dat.to_csv('graph.csv')
+    max_imp.to_pickle('max_imp.pickle')
 
 main()

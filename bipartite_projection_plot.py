@@ -7,13 +7,20 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import math
 import random
+import pickle
 
 def load_dat():
     graph = ig.read('igraph_small.csv',format='edge')
     vals = pd.read_csv('vals_small.csv')['val']
     hs = pd.read_csv('vals_small.csv')['hs10']
+    hss = pd.read_csv('vals_small.csv')['hs_source']
     dest = pd.read_csv('vals_small.csv')['dest_alf']
-    return graph, vals, hs, dest
+    dest_source = pd.read_csv('vals_small.csv')['dest']
+    imp_name = pd.read_csv('vals_small.csv')['imp_name']
+    atts = {'vals': vals,'hs': hs,'dest': dest,
+            'hss': hss,'dest_source': dest_source,
+            'imp_name': imp_name}
+    return graph, atts
 
 def what_sellers(es, coun):
     '''takes an igraph edgesequence, and returns list
@@ -31,13 +38,37 @@ def what_sellers(es, coun):
 
     return res
 
-def make_projection(graph, vals, hs, dest):
+def source_hs(es,lab):
+    '''takes an igraph edgesequence, and returns tuple 
+    of lists of vertices and hs codes to the US'''
+
+    #find sellers
+    raw_tups = []
+    for obj in graph.es:
+        i = obj.source
+        h = obj[lab]
+        raw_tups.append((i, h))
+
+    #unique list
+    uniq = set(raw_tups)
+    utups = list(uniq)
+
+    #get tuple of lists rather than list of tuples
+    ids = [x[0] for x in utups]
+    hss = [x[1] for x in utups]
+
+    return (ids, hss)
+
+def make_projection(graph, atts):
     """ makes bipartite projections, returns seller projection"""
 
     # PREPARE EDGE ATTRIBUTES
-    graph.es['val'] = list(vals)
-    graph.es['hs'] = list(hs)
-    graph.es['dest'] = list(dest)
+    graph.es['val'] = list(atts['vals'])
+    graph.es['hs'] = list(atts['hs'])
+    graph.es['dest'] = list(atts['dest'])
+    graph.es['hss'] = list(atts['hss'])
+    graph.es['dest_source'] = list(atts['dest_source'])
+    graph.es['imp_name'] = list(atts['imp_name'])
 
     # PREPARE VERTEX ATTRIBUTES
     # The strength member function sums all of the edge values
@@ -46,16 +77,23 @@ def make_projection(graph, vals, hs, dest):
     us_list = what_sellers(graph.es, 'USA')
     graph.vs['US'] = 0
     graph.vs[us_list]['US'] = 1
-    # Get list of exporters who sell to Brazil 
-    us_list = what_sellers(graph.es, 'ARG')
-    graph.vs['ARG'] = 0
-    graph.vs[us_list]['ARG'] = 1
-
+    # Get list of exporters who sell to a seleted foreign coutnry
+    us_list = what_sellers(graph.es, 'VEN')
+    graph.vs['VEN'] = 0
+    graph.vs[us_list]['VEN'] = 1
+    # Get most frequent hs by exporter
+    hs_tup = source_hs(graph.es,'hss')
+    graph.vs['hs_source'] = 0
+    graph.vs[hs_tup[0]]['hs_source'] = hs_tup[1]
+    # Get most frequent destimation
+    dest_tup = source_hs(graph.es,'dest_source')
+    graph.vs['dest_source'] = 0
+    graph.vs[dest_tup[0]]['dest_source'] = dest_tup[1]
     
     # SIZES FROM graph.csv
-    size =15563
-    edge_size = 76766
-    big_size = 49272
+    size = 10046
+    edge_size = 58031
+    big_size = 40789
     sub = size
 
     # MAKE THE TWO TYPES (SELLER AND BUYER)
@@ -66,6 +104,9 @@ def make_projection(graph, vals, hs, dest):
     proj2, proj1 = graph.bipartite_projection()
     proj1.vs['val'] = graph.vs[0:sub]['val']
     proj1.vs['val'] = graph.vs[0:sub]['val']
+    # Get most valuable importer 
+    max_imp = pd.read_pickle('max_imp.pickle')
+    proj1.vs['imp_name'] = max_imp
 
     # WRITE AND READ
     proj1.write_pickle('proj1.pickle')
@@ -121,23 +162,32 @@ def plot_comp(comp, fname, layout_name):
 
     size = len(comp.vs)
     edge_size = len(comp.es)
-    comp.vs['label'] = [int(x / 10000000) for x in comp.vs['hs']]
+    comp.vs['label'] = [''] * size
     comp.vs['size']  = [math.log(x) for x in comp.vs.degree()]
     #comp.vs['label_size']  = [0] * size
     comp.es['arrow_size']  = [0] * edge_size
-    comp.es['width']  = [0.1] * edge_size
+    comp.es['width']  = [0.01] * edge_size
+    comp.es['transparency']  = [0.5] * edge_size
+    comp.es['color']  = 'gray'
 
     # try a plot
     likey_layout = 'n'
     while likey_layout == 'n':
 
         # reduce size
-        comp_new = comp.induced_subgraph(random.sample(range(len(comp.vs)),5000))
+        biggest = []
+        for x in comp.vs:
+            if x['val'] > 1e5:
+                biggest.append(x.index)
+        print(len(biggest))
+
+        #comp_new = comp.induced_subgraph(random.sample(range(len(comp.vs)),5000))
+        comp_new = comp.induced_subgraph(comp.vs[biggest])
         clust = comp_new.clusters()
         lcc = clust.giant()
         layout = lcc.layout(layout_name)
 
-        for coloring in ['USA', 'ARG', 'community']:
+        for coloring in ['USA', 'VEN', 'hs', 'hs_val', 'sect', 'sect_val', 'dest', 'name', 'community']:
 
             print(coloring)
 
@@ -150,19 +200,159 @@ def plot_comp(comp, fname, layout_name):
                         color.append('black')
                 lcc.vs['color'] = color
 
-            if coloring == 'ARG':
+            if coloring == 'VEN':
                 color = []
-                for x in lcc.vs['ARG']:
+                for x in lcc.vs['VEN']:
                     if x == 1:
                         color.append('red')
                     else:
                         color.append('black')
                 lcc.vs['color'] = color
 
+            if coloring == 'hs_val':
+                trunk  = [int(x / 100000000) for x in lcc.vs['hs_source']]
+                lcc.vs['label'] = trunk
+                color = []
+                for x in trunk:
+                    if x % 7 == 0:
+                        color.append('yellow')
+                    if x % 7 == 1:
+                        color.append('red')
+                    if x % 7 == 2:
+                        color.append('green')
+                    if x % 7 == 3:
+                        color.append('blue')
+                    if x % 7 == 4:
+                        color.append('orange')
+                    if x % 7 == 5:
+                        color.append('black')
+                    if x % 7 == 6:
+                        color.append('purple')
+                lcc.vs['color'] = 'white'
+                lcc.vs['size'] = [0] * size
+                lcc.vs['label_color'] = color
+                lcc.vs['label_size']  = [math.log(x / 1e5) for x in lcc.vs['val']]
+                lcc.es['width']  = [0] * edge_size
+
+            if coloring == 'hs':
+                trunk  = [int(x / 100000000) for x in lcc.vs['hs_source']]
+                lcc.vs['label'] = trunk
+                color = []
+                for x in trunk:
+                    if x % 7 == 0:
+                        color.append('yellow')
+                    if x % 7 == 1:
+                        color.append('red')
+                    if x % 7 == 2:
+                        color.append('green')
+                    if x % 7 == 3:
+                        color.append('blue')
+                    if x % 7 == 4:
+                        color.append('orange')
+                    if x % 7 == 5:
+                        color.append('black')
+                    if x % 7 == 6:
+                        color.append('purple')
+                lcc.vs['color'] = 'white'
+                lcc.vs['size'] = [0] * size
+                lcc.vs['label_color'] = color
+                lcc.vs['label_size']  = [math.log(x) for x in lcc.vs.degree()]
+                lcc.es['width']  = [0] * edge_size
+
+            if coloring == 'sect':
+                trunk  = [int(x / 100000000) for x in lcc.vs['hs_source']]
+                color = []
+                lab = []
+                for x in trunk:
+                    if x <= 24:
+                        color.append('green')
+                        lab.append('food')
+                    if (x > 24 and x < 28) or (x > 70 and x < 84):
+                        color.append('black')
+                        lab.append('primary')
+                    if (x >=28 and x <=70) or (x >= 84):
+                        color.append('gray')
+                        lab.append('manufactures')
+                lcc.vs['label'] = lcc.vs['dest_source']
+                lcc.vs['color'] = 'white'
+                lcc.vs['size'] = [0] * size
+                lcc.vs['label_color'] = color
+                lcc.vs['label_size']  = [math.log(x) for x in lcc.vs.degree()]
+                lcc.es['width']  = [0] * edge_size
+
+            if coloring == 'sect_val':
+                trunk  = [int(x / 100000000) for x in lcc.vs['hs_source']]
+                color = []
+                lab = []
+                for x in trunk:
+                    if x <= 24:
+                        color.append('green')
+                    if (x > 24 and x < 28) or (x > 70 and x < 84):
+                        color.append('black')
+                    if (x >=28 and x <=70) or (x >= 84):
+                        color.append('gray')
+                lcc.vs['label'] = lcc.vs['dest_source']
+                lcc.vs['color'] = 'white'
+                lcc.vs['size'] = [0] * size
+                lcc.vs['label_color'] = color
+                lcc.vs['label_size']  = [math.log(x / 1e5) for x in lcc.vs['val']]
+                lcc.es['width']  = [0] * edge_size
+
+            if coloring == 'dest':
+                trunk  = lcc.vs['dest_source']
+                lcc.vs['label'] = trunk
+                color = []
+                for x in trunk:
+                    if hash(x) % 8 == 0:
+                        color.append('yellow')
+                    if hash(x) % 8 == 1:
+                        color.append('red')
+                    if hash(x) % 8 == 2:
+                        color.append('green')
+                    if hash(x) % 8 == 3:
+                        color.append('blue')
+                    if hash(x) % 8 == 4:
+                        color.append('orange')
+                    if hash(x) % 8 == 5:
+                        color.append('black')
+                    if hash(x) % 8 == 6:
+                        color.append('purple')
+                    if hash(x) % 8 == 7:
+                        color.append('pink')
+                lcc.vs['color'] = 'white'
+                lcc.vs['size'] = [0] * size
+                lcc.vs['label_color'] = color
+                lcc.vs['label_size']  = [math.log(x) for x in lcc.vs.degree()]
+                lcc.es['width']  = [0] * edge_size
+
+            if coloring == 'name':
+                for x in lcc.vs['dest_source']:
+                    if hash(x) % 8 == 0:
+                        color.append('yellow')
+                    if hash(x) % 8 == 1:
+                        color.append('red')
+                    if hash(x) % 8 == 2:
+                        color.append('green')
+                    if hash(x) % 8 == 3:
+                        color.append('blue')
+                    if hash(x) % 8 == 4:
+                        color.append('orange')
+                    if hash(x) % 8 == 5:
+                        color.append('black')
+                    if hash(x) % 8 == 6:
+                        color.append('purple')
+                    if hash(x) % 8 == 7:
+                        color.append('pink')
+                trunk  = [x[:12] for x in lcc.vs['imp_name']]
+                lcc.vs['label'] = trunk
+                lcc.vs['label_size']  = [math.log(x / 1e5) for x in lcc.vs['val']]
+
             if coloring == 'community':
+                lcc.vs['size']  = [math.log(x) for x in lcc.vs.degree()]
+                lcc.vs['label'] = [''] * size
                 lcc = lcc.community_walktrap().as_clustering()
 
-            ig.plot(lcc, fname + coloring + '.png',
+            ig.plot(lcc, fname + coloring + '.pdf',
                     layout = layout)
 
         likey_layout = input('What do you think?  Keep it? (y/n): ')
@@ -208,29 +398,36 @@ def bc_hist(g, name):
 if __name__ == "__main__":
     """ runs all the functions """
 
-    # LOAD DATA
-    graph, vals, hs, dest = load_dat()    
+    repickle = input('Repickle data? (y/n): ')
 
-    # SET ATTRIBUTES
-    proj1, proj2 = make_projection(graph, vals, hs, dest)
+    if repickle == 'y':
+        # LOAD DATA
+        graph, atts = load_dat()    
 
-    
-    # GET COMPONENTS AND VAL INFO
-    clust, lcc, totval, giantval = get_comps(proj1)
-    
-    # PRINT COMPONENT SIZE COUNTS
-    #csize(clust)
+        # GET NEW SIZES
 
-    # GET PATH LENGTH HISTOGRAM
-    #pl_hist(proj1)
+        # SET ATTRIBUTES
+        proj1, proj2 = make_projection(graph, atts)
+        
+        # GET COMPONENTS AND VAL INFO
+        clust, lcc, totval, giantval = get_comps(proj1)
+        
+        # PRINT COMPONENT SIZE COUNTS
+        csize(clust)
 
-    # GET NODE BY NODE BETWEENNESS CENTRALITY HISTOGRAM
-    #bc_hist(proj1, 'expexp')
-    #bc_hist(proj2, 'impimp')
+        # GET PATH LENGTH HISTOGRAM
+        #pl_hist(proj1)
 
-    # PLOT LARGEST COMPONENT
-    # print('working on DRL')
-    # plot_comp(lcc, 'largest_component_drl.png', 'drl')
+        # GET NODE BY NODE BETWEENNESS CENTRALITY HISTOGRAM
+        #bc_hist(proj1, 'expexp')
+        #bc_hist(proj2, 'impimp')
+
+        # PLOT LARGEST COMPONENT
+        # print('working on DRL')
+        # plot_comp(lcc, 'largest_component_drl.png', 'drl')
+        pickle.dump(lcc, open('lcc.pickle','wb'))
+
+    lcc = pickle.load(open('lcc.pickle','rb'))
     print('working on lgL')
     plot_comp(lcc, 'largest_component_lgl', 'lgl')
     # print('community')
