@@ -29,7 +29,7 @@ if __name__ == "__main__":
     dat['YEAR'] = dat['yr_month'].apply(lambda x: int(x / 100))
 
     #YEAR FILTER
-    #dat = dat[dat['YEAR'] == 2011]
+    dat = dat[dat['YEAR'] == 2011]
     
     #REPLACE STRINGS WITH NUMBERS - IMPORTER
     grouped = dat.groupby('STR_ID')['dest_alf'].first() # unique row for each firm
