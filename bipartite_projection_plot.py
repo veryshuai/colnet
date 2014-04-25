@@ -91,9 +91,9 @@ def make_projection(graph, atts):
     graph.vs[dest_tup[0]]['dest_source'] = dest_tup[1]
     
     # SIZES FROM graph.csv
-    size = 10046
-    edge_size = 58031
-    big_size = 40789
+    size = 15538
+    edge_size = 76364 
+    big_size = 49180
     sub = size
 
     # MAKE THE TWO TYPES (SELLER AND BUYER)
@@ -174,6 +174,7 @@ def plot_comp(comp, fname, layout_name):
     likey_layout = 'n'
     while likey_layout == 'n':
 
+        myseed = input('Enter random seed: ')
         # reduce size
         biggest = []
         for x in comp.vs:
@@ -185,7 +186,8 @@ def plot_comp(comp, fname, layout_name):
         comp_new = comp.induced_subgraph(comp.vs[biggest])
         clust = comp_new.clusters()
         lcc = clust.giant()
-        layout = lcc.layout(layout_name)
+        random.seed(myseed)
+        layout = lcc.layout(layout_name, root=0)
 
         for coloring in ['USA', 'VEN', 'hs', 'hs_val', 'sect', 'sect_val', 'dest', 'name', 'community']:
 
