@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import math
 import random
 import pickle
+from collections import defaultdict
 
 def load_dat():
     graph = ig.read('igraph_small.csv',format='edge')
@@ -91,9 +92,9 @@ def make_projection(graph, atts):
     graph.vs[dest_tup[0]]['dest_source'] = dest_tup[1]
     
     # SIZES FROM graph.csv
-    size = 15538
-    edge_size = 76364 
-    big_size = 49180
+    size = 10046
+    edge_size = 58031
+    big_size = 40789 
     sub = size
 
     # MAKE THE TWO TYPES (SELLER AND BUYER)
@@ -114,7 +115,6 @@ def make_projection(graph, atts):
     print(ig.summary(proj1))
 
     return proj1, proj2
-
 
 def get_comps(proj1):
     """ finds components and component statistics"""
@@ -397,6 +397,34 @@ def bc_hist(g, name):
 
     return 0
 
+def spath(lcc):
+    '''statistics related to the shortest path in largest component'''
+
+    #sp = lcc.shortest_paths_dijkstra(source=range(1000))
+    ecc = lcc.eccentricity()
+    print('Max eccentricity')
+    print(max(ecc))
+    print('Min eccentricity')
+    print(min(ecc))
+    print('Mean eccentricity')
+    print(sum(ecc) / float(len(ecc)))
+
+    return 0
+
+def eigcent(lcc):
+    '''statistics related to the eigenvector centrality of largest component'''
+
+    #sp = lcc.shortest_paths_dijkstra(source=range(1000))
+    cent = lcc.eigenvector_centrality()
+    idxmax = cent.index(max(cent))
+    print(lcc.vs[idxmax])
+    appearances = defaultdict(int)
+    twodig = [int(x / 100000000) for x in lcc.vs[lcc.neighbors(2213)]['hs_source']]
+    for curr in twodig:
+        appearances[curr] += 1
+
+    return 0
+
 if __name__ == "__main__":
     """ runs all the functions """
 
@@ -416,6 +444,12 @@ if __name__ == "__main__":
         
         # PRINT COMPONENT SIZE COUNTS
         csize(clust)
+
+        # SHORTEST PATH STUFF
+        #spath(lcc)
+
+        # CENTRALITY STUFF
+        #eigcent(lcc)
 
         # GET PATH LENGTH HISTOGRAM
         #pl_hist(proj1)
